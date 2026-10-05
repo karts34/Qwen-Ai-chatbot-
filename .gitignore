@@ -1,0 +1,6 @@
+.runtime/
+.models/
+__pycache__/
+*.pyc
+*.gguf
+*.exe

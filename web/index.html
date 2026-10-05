@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#101c25">
+  <title>Local Chat</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Models and conversations">
+      <a class="brand" href="/" aria-label="Local Chat home">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M9 8h14a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4H12l-7 4V12a4 4 0 0 1 4-4Z"/><path d="M11 14v4m5-7v10m5-7v4"/></svg></span>
+        <span>Local Chat<small>Your private AI workspace</small></span>
+      </a>
+      <button class="new-chat" id="new-chat" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New chat<span>＋</span></button>
+      <section class="model-section" aria-labelledby="models-heading">
+        <div class="section-heading"><h2 id="models-heading">ON THIS COMPUTER</h2><button class="icon-button small" id="refresh-models" title="Refresh installed models" aria-label="Refresh installed models"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17"/></svg></button></div>
+        <div id="model-list" class="model-list" aria-label="Installed models"><p class="sidebar-empty">Looking for your models…</p></div>
+        <div class="connection-message" id="connection-message" hidden></div>
+      </section>
+      <section class="history-section" aria-labelledby="history-heading">
+        <div class="section-heading"><h2 id="history-heading">RECENT CHATS</h2><button class="icon-button small" id="clear-history" title="Clear chat history" aria-label="Clear chat history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button></div>
+        <div class="conversation-list" id="conversation-list"><p class="sidebar-empty">Your conversations will appear here.</p></div>
+      </section>
+      <div class="sidebar-footer">
+        <div class="privacy-note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></svg><div><strong>Your chats stay here</strong><span>History saved in this browser.</span></div></div>
+        <div class="server-status"><span class="status-dot" id="sidebar-status-dot"></span><span id="sidebar-status">Connecting to local server</span></div>
+      </div>
+    </aside>
+    <button class="sidebar-overlay" id="sidebar-overlay" aria-label="Close navigation" hidden></button>
+    <main class="main-panel">
+      <header class="topbar">
+        <div class="topbar-left"><button class="icon-button mobile-menu" id="menu-button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="active-model"><span class="active-model-label" id="active-model-name">Choose a local model</span><span class="active-model-description" id="active-model-description">A little more privacy. A lot of possibility.</span></div></div>
+        <div class="local-badge" id="local-badge"><span class="status-dot"></span><span id="local-badge-label">Connecting</span></div>
+      </header>
+      <div class="notice" id="notice" role="status" hidden><span id="notice-text"></span><button class="icon-button small" id="dismiss-notice" aria-label="Dismiss notice">×</button></div>
+      <div class="chat-scroll" id="chat-scroll">
+        <section class="welcome" id="welcome">
+          <div class="welcome-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M7 13v6m6-11v16m6-21v26m6-16v6"/></svg></div>
+          <p class="eyebrow">THINK FREELY. CHAT LOCALLY.</p>
+          <h1>A space for your next idea.</h1>
+          <p class="welcome-description">Explore, create, and work things out with AI running on your own computer.</p>
+          <div class="prompt-grid">
+            <button class="prompt-card" type="button" data-prompt="Explain a complex topic using a simple analogy. Start with how large language models work."><span class="prompt-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 14c-4-4-1-11 4-11s8 7 4 11l-1 3H9l-1-3Z"/></svg></span><strong>Make sense of something</strong><span>Turn a complex topic into a clear explanation.</span><svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></button>
+            <button class="prompt-card" type="button" data-prompt="Help me write a Python script that organizes files in a folder by their file type. Explain the code and include a safe dry-run option."><span class="prompt-icon blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 20"/></svg></span><strong>Build something useful</strong><span>Get a fresh pair of eyes on your next project.</span><svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></button>
+            <button class="prompt-card" type="button" data-prompt="Help me brainstorm five practical ideas for a small project I can finish this weekend. Ask me about my interests first."><span class="prompt-icon lavender"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></svg></span><strong>Find a new angle</strong><span>Brainstorm ideas and see where they lead.</span><svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></button>
+            <button class="prompt-card" type="button" data-prompt="Help me create a realistic study plan for learning a new skill. Ask me what I want to learn and how much time I have each week."><span class="prompt-icon amber"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 5 9 4 9-4v14l-9 2-9-2V5Zm9 4v12"/></svg></span><strong>Learn at your own pace</strong><span>Make a plan, ask questions, keep growing.</span><svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></button>
+          </div>
+          <p class="welcome-footnote"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></svg>Local models process your messages on this computer.</p>
+        </section>
+        <section class="messages" id="messages" aria-label="Conversation" aria-live="off"></section>
+      </div>
+      <div class="composer-area">
+        <form class="composer" id="chat-form">
+          <label class="sr-only" for="message-input">Your message</label>
+          <textarea id="message-input" rows="1" placeholder="Message your local AI…" maxlength="32000" disabled></textarea>
+          <div class="composer-bottom"><div class="composer-tools"><span class="composer-model" id="composer-model">No model selected</span><label class="reasoning-toggle" title="Enable reasoning for models that support it"><input type="checkbox" id="reasoning-toggle"><span>Reasoning</span></label></div><button class="send-button" id="send-button" type="submit" aria-label="Send message" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><button class="stop-button" id="stop-button" type="button" aria-label="Stop generating" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1"/></svg></button></div>
+        </form>
+        <div class="composer-caption"><span>Enter to send <span class="caption-divider">·</span> Shift + Enter for a new line</span><span>AI can make mistakes. Check important details.</span></div>
+      </div>
+      <div class="sr-only" id="screen-reader-status" role="status" aria-live="polite"></div>
+    </main>
+  </div>
+  <dialog class="confirm-dialog" id="clear-dialog"><form method="dialog"><h2>Clear your chat history?</h2><p>This removes saved conversations from this browser.</p><div class="dialog-actions"><button class="dialog-cancel" value="cancel">Keep chats</button><button class="dialog-confirm" value="clear">Clear history</button></div></form></dialog>
+</body>
+</html>
