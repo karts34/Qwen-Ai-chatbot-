@@ -1,0 +1,5 @@
+FROM ./.models/huggingface/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf
+PARAMETER num_ctx 4096
+PARAMETER num_predict 4096
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95

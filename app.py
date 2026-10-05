@@ -56,6 +56,46 @@ def is_local_model(model: dict) -> bool:
     return True
 
 
+def reasoning_profile(name: str, metadata: dict | None = None) -> dict:
+    """Use Ollama's supported controls; imported models may only expose a capability."""
+    metadata = metadata or {}
+    thinking = metadata.get("thinking")
+    if isinstance(thinking, dict) and isinstance(thinking.get("values"), list):
+        values = thinking["values"]
+        allows_on = any(value is True for value in values)
+        allows_off = any(value is False for value in values)
+        if allows_on and allows_off:
+            return {"mode": "toggle", "default": thinking.get("default", True)}
+        if allows_on:
+            return {"mode": "required", "default": True}
+        if allows_off and len(values) == 1:
+            return {"mode": "none", "default": False}
+        if values:
+            return {"mode": "default", "default": thinking.get("default", True)}
+    # Preserve the controls of existing Qwen installations on older runtimes.
+    model_base = name.lower().split(":", 1)[0].rsplit("/", 1)[-1]
+    if model_base.startswith("qwen3") and "thinking" in name.lower():
+        return {"mode": "required", "default": True}
+    if model_base == "qwen3":
+        return {"mode": "toggle", "default": True}
+    capabilities = metadata.get("capabilities", [])
+    if isinstance(capabilities, list) and "thinking" in capabilities:
+        # No on/off metadata means we keep the model's native default behavior.
+        return {"mode": "default", "default": True}
+    return {"mode": "none", "default": False}
+
+
+def apply_model_controls(payload: dict, requested: dict, profile: dict):
+    """Never send an unsupported thinking toggle to an imported reasoner."""
+    payload.pop("think", None)
+    mode = profile["mode"]
+    if mode == "toggle":
+        # Keep quick direct answers as the app default for switchable models.
+        payload["think"] = requested.get("think", False)
+    reasons = mode in ("required", "default") or payload.get("think") is True
+    payload["options"]["num_predict"] = 4096 if reasons else 1024
+
+
 def validate_chat(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise APIError(400, "Send a JSON object containing model and messages.")
@@ -91,20 +131,13 @@ def validate_chat(payload: object) -> dict:
         raise APIError(400, "Temperature must be a number from 0 to 2.")
     if "think" in payload and not isinstance(payload["think"], bool):
         raise APIError(400, "Think must be true or false.")
-    model_base = name.lower().split(":", 1)[0].rsplit("/", 1)[-1]
     result = {
         "model": name,
         "messages": clean_messages,
         "stream": True,
         "keep_alive": "5m",
-        "options": {"temperature": temperature, "num_ctx": 4096,
-                    "num_predict": 4096 if "thinking" in name.lower() else 1024},
+        "options": {"temperature": temperature, "num_ctx": 4096, "num_predict": 1024},
     }
-    # Qwen3 supports toggling thinking. Other models may have different controls.
-    if model_base == "qwen3" and "thinking" not in name.lower():
-        result["think"] = payload.get("think", False)
-    elif payload.get("think") is True:
-        result["think"] = True
     return result
 
 
@@ -118,6 +151,8 @@ class OllamaClient:
                 or parsed.username or parsed.password):
             raise ValueError("Ollama must use an HTTP URL on 127.0.0.1.")
         self.port = parsed.port or 80
+        self._model_profiles = {}
+        self._profile_lock = threading.Lock()
 
     def request(self, method: str, path: str, payload: dict | None = None,
                 *, stream: bool = False, on_connect=None):
@@ -149,8 +184,8 @@ class OllamaClient:
                 raise APIError(504, "Ollama took too long to respond. Try a smaller model or retry.") from error
             raise APIError(503, "Ollama is not running. Start the local Ollama service and retry.") from error
 
-    def json(self, path: str) -> dict:
-        connection, response = self.request("GET", path)
+    def json(self, path: str, payload: dict | None = None) -> dict:
+        connection, response = self.request("POST" if payload is not None else "GET", path, payload)
         try:
             raw = response.read(MAX_UPSTREAM_BYTES + 1)
             if len(raw) > MAX_UPSTREAM_BYTES:
@@ -170,8 +205,25 @@ class OllamaClient:
         data = self.json("/api/tags")
         if not isinstance(data.get("models"), list):
             raise APIError(502, "Ollama returned an invalid model list.")
-        return [{key: model[key] for key in ("name", "size", "modified_at", "details") if key in model}
-                for model in data["models"] if isinstance(model, dict) and is_local_model(model)]
+        models = []
+        for model in data["models"]:
+            if not isinstance(model, dict) or not is_local_model(model):
+                continue
+            name = model["name"]
+            identity = (name, str(model.get("digest", model.get("modified_at", ""))),
+                        str(model.get("size", "")))
+            with self._profile_lock:
+                if identity not in self._model_profiles:
+                    try:
+                        metadata = self.json("/api/show", {"model": name})
+                    except APIError:
+                        metadata = {}
+                    self._model_profiles[identity] = reasoning_profile(name, metadata)
+                profile = self._model_profiles[identity]
+            public = {key: model[key] for key in ("name", "size", "modified_at", "details") if key in model}
+            public["reasoning"] = profile
+            models.append(public)
+        return models
 
 
 class ChatServer(ThreadingHTTPServer):
@@ -398,10 +450,13 @@ class ChatHandler(BaseHTTPRequestHandler):
             self._check_origin()
             if urlsplit(self.path).path != "/api/chat":
                 raise APIError(404, "This API route does not exist.")
-            payload = validate_chat(self._read_payload())
+            requested = self._read_payload()
+            payload = validate_chat(requested)
             models = self.server.ollama.models()
-            if payload["model"] not in {model["name"] for model in models}:
+            model = next((model for model in models if model["name"] == payload["model"]), None)
+            if model is None:
                 raise APIError(400, "This local model is not installed. Refresh the model list and choose an installed model.")
+            apply_model_controls(payload, requested, model["reasoning"])
             acquired = self.server.generation_lock.acquire(blocking=False)
             if not acquired:
                 raise APIError(409, "Another response is still running. Wait for it to finish and retry.")

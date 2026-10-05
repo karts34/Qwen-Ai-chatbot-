@@ -26,7 +26,18 @@ After setup completes, these steps work with internet disconnected. The first re
 | `qwen3:1.7b` | Qwen 3 1.7B | Downloaded by setup; default compact general-purpose and multilingual chat. Thinking is disabled for faster replies. |
 | `llama3.2:1b` | Llama 3.2 1B | Downloaded by setup; compact text chat from Meta. |
 | `gemma3:1b` | Gemma 3 1B | Downloaded by setup; compact text chat from Google. |
+| `deepseek-r1-hf:1.5b` | DeepSeek-R1-Distill-Qwen-1.5B, Q4_K_M | Optional Hugging Face download and local import; compact reasoning model. |
 | `qwen3-4b-thinking-local:latest` | Qwen 3 4B Thinking 2507 | Optional GGUF import. Always reasons before answering; slower. |
+
+To install DeepSeek from Hugging Face, run this from the project folder while connected to the internet:
+
+```powershell
+.\start.bat -DeepSeek
+```
+
+The same launcher downloads approximately 1.12 GB of Q4_K_M weights from [Unsloth's GGUF repository](https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF), verifies the file's SHA-256 at a pinned repository revision, imports it as `deepseek-r1-hf:1.5b`, and opens the chatbot. The source model is [DeepSeek's DeepSeek-R1-Distill-Qwen-1.5B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B). It is a small distilled model with lower capability than the full 671B DeepSeek-R1 model; replies may take longer while it reasons.
+
+After installation, double-click **start.bat** and select **DeepSeek** in the model list. It runs locally without internet. A fresh clone still installs the three compact models by default; DeepSeek is added with `-DeepSeek`. Repeating the command reuses verified downloads.
 
 To add the optional Qwen 4B Thinking model, place your `qwen3-4b-thinking-2507.Q4_K_M.gguf` file in the project root, alongside `start.bat`, then run **start.bat -Setup**. The file is not provided by this repository. Setup imports it when present; a fresh clone runs with the three compact models without this file.
 
@@ -54,6 +65,8 @@ Refresh the model list in the page after downloading. Downloading new models req
 
 - `.runtime/ollama/`: portable Ollama installation.
 - `.models/`: downloaded and imported model files.
+- `.models/huggingface/`: downloaded Hugging Face GGUF weights, excluded from Git.
+- `.runtime/downloads/huggingface/`: cached Hugging Face metadata, model cards, and upstream license files.
 - `.runtime/logs/`: local runtime and web-server logs.
 - `web/`: all page assets, served locally.
 - `app.py`: Python standard-library web server; no pip packages needed.
@@ -76,11 +89,13 @@ Run the backend checks with:
 py -3 -m unittest discover -s tests -v
 ```
 
-## Official references
+## References
 
 - [Ollama for Windows](https://docs.ollama.com/windows)
 - [Importing GGUF models](https://docs.ollama.com/import)
 - [Local-only mode and runtime settings](https://docs.ollama.com/faq)
 - [Qwen 3](https://ollama.com/library/qwen3:1.7b), [Llama 3.2](https://ollama.com/library/llama3.2:1b), [Gemma 3](https://ollama.com/library/gemma3:1b)
+- [DeepSeek's official distilled model](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B)
+- [Unsloth's DeepSeek GGUF quantization](https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF)
 
-Models retain their upstream licenses; downloading or importing a model does not change its license.
+Models retain their upstream licenses; downloading or importing a model does not change its license. The Hugging Face installer preserves upstream license files and model cards alongside cached metadata; consult both the original model and quantization repository for their notices.

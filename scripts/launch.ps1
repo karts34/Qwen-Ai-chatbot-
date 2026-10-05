@@ -1,12 +1,13 @@
 param(
     [switch]$Setup,
     [switch]$Stop,
+    [switch]$DeepSeek,
     [ValidateRange(1, 65535)][int]$Port = 8080,
     [switch]$NoBrowser
 )
 
 $ErrorActionPreference = 'Stop'
-if ($Setup -and $Stop) { throw 'Choose either -Setup or -Stop, not both.' }
+if ($Stop -and ($Setup -or $DeepSeek)) { throw 'Use -Stop on its own, without -Setup or -DeepSeek.' }
 
 if ($Stop) {
     & (Join-Path $PSScriptRoot 'stop.ps1')
@@ -68,6 +69,10 @@ if ($Setup -or $missing.Count -gt 0) {
     if ($remaining.Count -gt 0) {
         throw ('Setup did not finish installing: ' + ($remaining -join ', ') + '. Run start.bat -Setup to resume.')
     }
+}
+
+if ($DeepSeek) {
+    & (Join-Path $PSScriptRoot 'install-deepseek.ps1')
 }
 
 & (Join-Path $PSScriptRoot 'start.ps1') -Port $Port -NoBrowser:$NoBrowser

@@ -73,8 +73,14 @@
     const family = name.split(/[/:]/).find(Boolean) || name;
     return family.charAt(0).toUpperCase();
   }
-  function reasoningRequired(name) { return /(^|\/)qwen3[^/]*thinking/i.test(name); }
-  function reasoningSupported(name) { return /(^|\/)qwen3:/i.test(name) && !reasoningRequired(name); }
+  function reasoningMode(name) {
+    const model = models.find((item) => item.name === name);
+    const mode = model && model.reasoning && model.reasoning.mode;
+    if (["toggle", "required", "default", "none"].includes(mode)) return mode;
+    if (/(^|\/)qwen3[^/]*thinking/i.test(name)) return "required";
+    return /(^|\/)qwen3:/i.test(name) ? "toggle" : "none";
+  }
+  function reasoningSupported(name) { return reasoningMode(name) === "toggle"; }
   function showNotice(message) {
     $("notice-text").textContent = message;
     $("notice").hidden = false;
@@ -245,7 +251,8 @@
   function updateControls() {
     const installed = models.some((model) => model.name === selectedModel);
     const canChat = serverReady && installed;
-    const alwaysReasons = reasoningRequired(selectedModel);
+    const mode = reasoningMode(selectedModel);
+    const alwaysReasons = mode === "required" || mode === "default";
     const supportsReasoning = reasoningSupported(selectedModel);
     ui.input.disabled = !canChat;
     ui.input.placeholder = canChat ? "Message " + readableName(selectedModel) + "…" : serverReady ? "Choose an installed model to start…" : "Waiting for the local server…";
@@ -254,8 +261,8 @@
     ui.send.disabled = !canChat || !ui.input.value.trim() || !!generation;
     ui.reasoning.checked = alwaysReasons || (supportsReasoning && preferredReasoning);
     ui.reasoning.disabled = !!generation || !canChat || !supportsReasoning;
-    ui.reasoning.nextElementSibling.textContent = alwaysReasons ? "Always reasons" : supportsReasoning ? "Reasoning" : "Direct answers";
-    ui.reasoning.parentElement.title = alwaysReasons ? "This model always uses reasoning before answering." : supportsReasoning ? "Enable reasoning before answering." : "This model responds without separate reasoning.";
+    ui.reasoning.nextElementSibling.textContent = mode === "default" ? "Model reasoning" : alwaysReasons ? "Always reasons" : supportsReasoning ? "Reasoning" : "Direct answers";
+    ui.reasoning.parentElement.title = mode === "default" ? "This model uses its default reasoning behavior." : alwaysReasons ? "This model always uses reasoning before answering." : supportsReasoning ? "Enable reasoning before answering." : "This model responds without separate reasoning.";
     $("active-model-name").textContent = selectedModel ? readableName(selectedModel) : "Choose a local model";
     $("active-model-description").textContent = selectedModel && !installed ? "This conversation’s model is no longer installed." : "A little more privacy. A lot of possibility.";
     $("composer-model").textContent = selectedModel ? readableName(selectedModel) : "No model selected";

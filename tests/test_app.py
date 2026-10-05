@@ -34,6 +34,9 @@ class MockOllamaHandler(BaseHTTPRequestHandler):
                 {"name": "llama3.2:1b", "size": 2000},
                 {"name": "qwen3-4b-thinking-local:latest", "size": 3000},
                 {"name": "qwen3:4b-thinking", "size": 3000},
+                {"name": "deepseek-r1-hf:1.5b", "size": 1500,
+                 "digest": self.server.model_digest},
+                {"name": "opaque-local:latest", "size": 2000},
                 {"name": "large:cloud", "size": 4000},
                 {"name": "remote:latest", "remote_host": "https://ollama.com"},
             ]})
@@ -42,6 +45,21 @@ class MockOllamaHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path == "/api/show":
+            self.server.shown.append(payload["model"])
+            if self.server.mode == "no-show":
+                self.respond(404, {"error": "Unknown route"})
+                return
+            profiles = {
+                "qwen3:1.7b": {"thinking": {"values": [False, True], "default": True}},
+                "llama3.2:1b": {"thinking": {"values": [False], "default": False}},
+                "qwen3-4b-thinking-local:latest": {"capabilities": ["thinking", "completion"]},
+                "qwen3:4b-thinking": {"thinking": {"values": [True], "default": True}},
+                "deepseek-r1-hf:1.5b": {"capabilities": ["thinking", "completion"]},
+                "opaque-local:latest": {"thinking": {"values": [True, False], "default": True}},
+            }
+            self.respond(200, profiles[payload["model"]])
+            return
         self.server.received.append(payload)
         self.server.started.set()
         mode = self.server.mode
@@ -79,6 +97,8 @@ class ChatAPITest(unittest.TestCase):
         self.upstream = ThreadingHTTPServer(("127.0.0.1", 0), MockOllamaHandler)
         self.upstream.daemon_threads = True
         self.upstream.received = []
+        self.upstream.shown = []
+        self.upstream.model_digest = "model-digest-1"
         self.upstream.mode = "normal"
         self.upstream.started = threading.Event()
         self.upstream.resume = threading.Event()
@@ -137,7 +157,8 @@ class ChatAPITest(unittest.TestCase):
         status, _, raw = self.request(path="/api/models")
         self.assertEqual(status, 200)
         self.assertEqual([model["name"] for model in json.loads(raw)["models"]],
-                         ["qwen3:1.7b", "llama3.2:1b", "qwen3-4b-thinking-local:latest", "qwen3:4b-thinking"])
+                         ["qwen3:1.7b", "llama3.2:1b", "qwen3-4b-thinking-local:latest",
+                          "qwen3:4b-thinking", "deepseek-r1-hf:1.5b", "opaque-local:latest"])
 
     def test_allowlisted_assets_and_security_headers(self):
         status, headers, raw = self.request(path="/")
@@ -221,6 +242,7 @@ class ChatAPITest(unittest.TestCase):
     def test_thinking_controls_match_model_capabilities(self):
         self.chat({**self.chat_payload(), "think": True})
         self.assertTrue(self.upstream.received[-1]["think"])
+        self.assertEqual(self.upstream.received[-1]["options"]["num_predict"], 4096)
         for model in ("qwen3-4b-thinking-local:latest", "qwen3:4b-thinking"):
             with self.subTest(model=model):
                 self.chat(self.chat_payload(model))
@@ -228,6 +250,49 @@ class ChatAPITest(unittest.TestCase):
                 self.assertEqual(self.upstream.received[-1]["options"]["num_predict"], 4096)
         self.chat({**self.chat_payload("llama3.2:1b"), "think": False})
         self.assertNotIn("think", self.upstream.received[-1])
+
+    def test_imported_reasoner_uses_metadata_and_preserves_native_thinking(self):
+        status, _, raw = self.request(path="/api/models")
+        self.assertEqual(status, 200)
+        models = {model["name"]: model for model in json.loads(raw)["models"]}
+        self.assertEqual(models["deepseek-r1-hf:1.5b"]["reasoning"]["mode"], "default")
+        self.assertEqual(models["opaque-local:latest"]["reasoning"]["mode"], "toggle")
+        for requested_think in (False, True):
+            with self.subTest(think=requested_think):
+                status, _, raw = self.chat({**self.chat_payload("deepseek-r1-hf:1.5b"),
+                                           "think": requested_think})
+                self.assertEqual(status, 200)
+                self.assertNotIn("think", self.upstream.received[-1])
+                self.assertEqual(self.upstream.received[-1]["options"]["num_predict"], 4096)
+                self.assertEqual(json.loads(raw.splitlines()[0])["type"], "thinking")
+        # Boolean controls are usable even when the model name is unfamiliar.
+        for requested_think in (False, True):
+            self.chat({**self.chat_payload("opaque-local:latest"), "think": requested_think})
+            self.assertEqual(self.upstream.received[-1]["think"], requested_think)
+            self.assertEqual(self.upstream.received[-1]["options"]["num_predict"],
+                             4096 if requested_think else 1024)
+
+    def test_reasoning_metadata_cache_tracks_model_digest(self):
+        self.request(path="/api/models")
+        shown = list(self.upstream.shown)
+        self.chat()
+        self.request(path="/api/models")
+        self.assertEqual(self.upstream.shown, shown)
+        self.upstream.model_digest = "model-digest-2"
+        self.request(path="/api/models")
+        self.assertEqual(self.upstream.shown, shown + ["deepseek-r1-hf:1.5b"])
+
+    def test_older_runtime_preserves_existing_qwen_controls(self):
+        self.upstream.mode = "no-show"
+        self.chat(self.chat_payload())
+        self.assertFalse(self.upstream.received[-1]["think"])
+        self.chat(self.chat_payload("qwen3-4b-thinking-local:latest"))
+        self.assertNotIn("think", self.upstream.received[-1])
+        self.assertEqual(self.upstream.received[-1]["options"]["num_predict"], 4096)
+
+    def test_explicit_metadata_overrides_legacy_name_fallback(self):
+        self.assertEqual(app.reasoning_profile("qwen3:thinking", {
+            "thinking": {"values": [False], "default": False}})["mode"], "none")
 
     def test_upstream_http_error_stays_http_error(self):
         self.upstream.mode = "http-error"
